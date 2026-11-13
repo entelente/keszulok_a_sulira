@@ -18,6 +18,9 @@ export function h(tag, props, ...kids) {
   return el;
 }
 
+/** Mint az Element.append, de a null / undefined / false elemeket kihagyja (nem írja ki „null”-ként). */
+export function add(el, ...kids) { append(el, kids); return el; }
+
 function append(el, kids) {
   for (const k of kids) {
     if (k === null || k === undefined || k === false) continue;

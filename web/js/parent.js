@@ -1,5 +1,5 @@
 // Szülői mód (számítógépre): áttekintés, kérések, számonkérések és témák szerkesztése, napló.
-import { h, confirmModal, modal, toast } from './dom.js';
+import { h, add, confirmModal, modal, toast } from './dom.js';
 import * as L from './logic.js';
 import {
   S, emit, today, logout, load, childName, userName,
@@ -38,7 +38,7 @@ export function renderParent(root, path, param) {
   };
   const [key, fn] = views[path] || views[''];
   const page = h('main', { class: 'ppage' });
-  root.append(nav(key), page);
+  add(root, nav(key), page);
   fn(page, param);
 }
 
@@ -58,7 +58,7 @@ function overview(page) {
   const total = todos.ma.length + todos.keszMa.length;
   const pendingReq = (d.requests || []).filter((r) => r.status === 'kerve');
 
-  page.append(
+  add(page, 
     h('h1', null, `${childName()} · ${longDate(t)}`),
     pendingReq.length ? h('a', { class: 'news', href: '#/kerdesek' }, `🎁 ${pendingReq.length} jutalomkérés vár jóváhagyásra →`) : null,
     h('div', { class: 'stats' },
@@ -93,7 +93,7 @@ function requestsView(page) {
   const pending = (d.requests || []).filter((r) => r.status === 'kerve').sort((a, b) => String(a.at).localeCompare(String(b.at)));
   const rest = (d.requests || []).filter((r) => r.status !== 'kerve').sort((a, b) => String(b.at).localeCompare(String(a.at)));
 
-  page.append(
+  add(page, 
     h('h1', null, 'Jutalomkérések'),
     h('p', { class: 'muted' }, `${childName()} egyenlege: ⭐ ${pts.balance} (ebből függőben ${pts.pending}). A jutalmakat a táblázat Jutalmak lapján szerkesztheted.`),
     section('Jóváhagyásra vár', null, pending.length ? h('div', { class: 'list' }, pending.map((r) => h('div', { class: 'list-row' },
@@ -140,7 +140,7 @@ function testsView(page) {
     ];
   };
   const headers = ['Dátum', 'Tantárgy', 'Típus', 'Cím', 'Nehézség', 'Kész témák', 'Felvette', ''];
-  page.append(
+  add(page, 
     h('div', { class: 'row space' }, h('h1', null, 'Számonkérések'), h('a', { class: 'btn primary', href: '#/szamonkeres/uj' }, '+ Új számonkérés')),
     section('Közelgő', null, upcoming.length ? table(headers, upcoming.map(rowOf)) : emptyState('📭', 'Nincs közelgő számonkérés.')),
     past.length ? h('details', { class: 'section' }, h('summary', null, `Korábbiak (${past.length})`), table(headers, past.map(rowOf))) : null,
@@ -154,7 +154,7 @@ function testEditView(page, id) {
   const t = today();
   const isNew = id === 'uj';
   const test = isNew ? null : d.tests.find((x) => x.id === id);
-  if (!isNew && !test) { page.append(emptyState('🤔', 'Ez a számonkérés már nincs meg.'), h('a', { href: '#/szamonkeresek' }, '← Vissza')); return; }
+  if (!isNew && !test) { add(page, emptyState('🤔', 'Ez a számonkérés már nincs meg.'), h('a', { href: '#/szamonkeresek' }, '← Vissza')); return; }
 
   if (!form || form.id !== id) {
     form = test ? {
@@ -204,7 +204,7 @@ function testEditView(page, id) {
     }
   };
 
-  page.append(
+  add(page, 
     h('a', { class: 'back', href: '#/szamonkeresek', onclick: () => { form = null; } }, '‹ Számonkérések'),
     h('h1', null, isNew ? 'Új számonkérés' : 'Számonkérés szerkesztése'),
     test ? h('p', { class: 'muted' }, `Felvette: ${userName(test.createdBy)} · ${String(test.createdAt).slice(0, 16)}`) : null,
@@ -268,23 +268,23 @@ function topicsView(page) {
   };
   const testsOf = (x) => (d.tests || []).filter((tt) => (tt.topicIds || []).includes(x.id)).map((tt) => `${tt.date} ${typeInfo(tt.type).label.toLowerCase()}`).join(', ');
 
-  const add = async () => {
+  const addNew = async () => {
     if (!newTopic.title.trim()) { toast('Írd be a téma nevét!', 'error'); return; }
     const r = await addTopic({ subject: newTopic.subject, title: newTopic.title, classDate: newTopic.classDate || '' });
     if (r) { newTopic.title = ''; toast('Hozzáadva.', 'success'); }
   };
 
-  page.append(
+  add(page, 
     h('h1', null, 'Témák'),
     h('div', { class: 'panel' },
       h('h2', null, 'Új téma'),
       h('div', { class: 'form-grid' },
         h('label', { class: 'field' }, h('span', null, 'Tantárgy'), h('select', { class: 'input', onchange: (e) => { newTopic.subject = e.target.value; } },
           (d.subjects || []).map((s) => h('option', { value: s.name, selected: newTopic.subject === s.name }, `${s.icon} ${s.name}`)))),
-        h('label', { class: 'field' }, h('span', null, 'Téma'), h('input', { class: 'input', value: newTopic.title, maxlength: 120, oninput: (e) => { newTopic.title = e.target.value; }, onkeydown: (e) => { if (e.key === 'Enter') add(); } })),
+        h('label', { class: 'field' }, h('span', null, 'Téma'), h('input', { class: 'input', value: newTopic.title, maxlength: 120, oninput: (e) => { newTopic.title = e.target.value; }, onkeydown: (e) => { if (e.key === 'Enter') addNew(); } })),
         h('label', { class: 'field' }, h('span', null, 'Órán vettük'), h('input', { class: 'input', type: 'date', value: newTopic.classDate, oninput: (e) => { newTopic.classDate = e.target.value; } }),
           h('span', { class: 'muted small' }, 'ha üres, nem kerül a rendszeres átnézendők közé')),
-        h('div', { class: 'field end' }, h('button', { class: 'btn primary', onclick: add, disabled: S.busy > 0 }, '+ Hozzáadás')))),
+        h('div', { class: 'field end' }, h('button', { class: 'btn primary', onclick: addNew, disabled: S.busy > 0 }, '+ Hozzáadás')))),
     h('div', { class: 'row' }, h('span', null, 'Szűrés:'),
       h('select', { class: 'input auto', onchange: (e) => { topicFilter = e.target.value; emit(); } },
         h('option', { value: '' }, 'Minden tantárgy'),
@@ -334,7 +334,7 @@ function logView(page) {
   const d = S.data;
   const byId = new Map((d.topics || []).map((x) => [x.id, x]));
   const rows = [...(d.log || [])].sort((a, b) => String(b.at || b.date).localeCompare(String(a.at || a.date))).slice(0, 300);
-  page.append(
+  add(page, 
     h('h1', null, 'Napló'),
     h('p', { class: 'muted' }, 'A legutóbbi 300 tanulás. A teljes napló a táblázat Napló lapján van.'),
     rows.length ? table(['Időpont', 'Tantárgy', 'Téma', 'Típus'], rows.map((l) => {

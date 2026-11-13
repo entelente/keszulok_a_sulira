@@ -606,7 +606,25 @@ function onOpen() {
     .addToUi();
 }
 
+/**
+ * Az összes szükséges engedély megadása (a szerkesztőből kell futtatni).
+ * Az engedélykérő ablakban MINDEN pontot be kell jelölni („Összes kijelölése”),
+ * különösen a „Csatlakozás külső szolgáltatáshoz” pontot: ezzel ellenőrzi a
+ * szkript a Google-bejelentkezést.
+ */
+function engedelyezes() {
+  if (typeof ScriptApp !== 'undefined' && ScriptApp.requireAllScopes) {
+    ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+  }
+  // Próbahívás a bejelentkezés-ellenőrző végpontra (token nélkül hibát ad, az itt rendben van).
+  const code = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=proba', { muteHttpExceptions: true }).getResponseCode();
+  Logger.log('Minden engedély megvan. (Próbahívás válaszkódja: ' + code + ', ez így rendben van.)');
+}
+
 function tablazatElokeszitese() {
+  if (typeof ScriptApp !== 'undefined' && ScriptApp.requireAllScopes) {
+    ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+  }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', ss.getId());
   ss.setSpreadsheetTimeZone('Europe/Budapest');

@@ -2,7 +2,7 @@
 // és telepíthető legyen. Az adatok (Apps Script) mindig a hálózatról jönnek.
 //
 // Új verzió kiadásakor növeld a VERSION értékét.
-const VERSION = 'keszulok-v1';
+const VERSION = 'keszulok-v2';
 const SHELL = [
   './',
   './index.html',

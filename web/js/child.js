@@ -1,5 +1,5 @@
 // Gyerek mód: nagy gombok, kevés gépelés, nyugodt visszajelzések.
-import { h, confirmModal, toast } from './dom.js';
+import { h, add, confirmModal, toast } from './dom.js';
 import * as L from './logic.js';
 import { S, emit, today, addTest, addTopic, updateTest, deleteTest, requestReward, cancelRequest, logout } from './store.js';
 import {
@@ -111,7 +111,7 @@ export function renderHome(root) {
     tests.length ? h('div', { class: 'test-list' }, tests.map((x) => testCard(x)))
       : emptyState('📭', 'Nincs felvett számonkérés. Ha lesz, vedd fel a „Dolgozat” gombbal!'));
 
-  root.append(
+  add(root, 
     topBar(t),
     rewardNews(),
     h('div', { class: 'grid2' },
@@ -152,7 +152,7 @@ function topicChoices(subject, selected, onToggle, exclude = []) {
 }
 
 function newTopicInput(state, placeholder = 'pl. Igeidők') {
-  const add = () => {
+  const addNew = () => {
     const v = (state.newText || '').trim();
     if (!v) return;
     if (!state.newTopics.includes(v)) state.newTopics.push(v);
@@ -164,11 +164,11 @@ function newTopicInput(state, placeholder = 'pl. Igeidők') {
     type: 'text', class: 'input', id: 'new-topic', placeholder, maxlength: 120, value: state.newText || '',
     enterkeyhint: 'done', autocomplete: 'off',
     oninput: (e) => { state.newText = e.target.value; },
-    onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } },
+    onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); addNew(); } },
   });
   if (state.focusNew) { state.focusNew = false; requestAnimationFrame(() => document.getElementById('new-topic')?.focus()); }
   return h('div', null,
-    h('div', { class: 'row' }, input, h('button', { class: 'btn secondary', onclick: add }, '+ Hozzáadom')),
+    h('div', { class: 'row' }, input, h('button', { class: 'btn secondary', onclick: addNew }, '+ Hozzáadom')),
     state.newTopics.length ? h('div', { class: 'chips-wrap' }, state.newTopics.map((x) => h('button', {
       class: 'chip-btn on new', 'aria-label': 'Eltávolítás: ' + x,
       onclick: () => { state.newTopics = state.newTopics.filter((y) => y !== x); emit(); },
@@ -199,7 +199,7 @@ export function renderAddTest(root, step) {
       groups.get(wk).push(x);
     }
     const weekLabel = (n) => (n === 0 ? 'Ezen a héten' : n === 1 ? 'Jövő héten' : `${n} hét múlva`);
-    root.append(pageHead('Új dolgozat', { step: 1, steps: 4 }),
+    add(root, pageHead('Új dolgozat', { step: 1, steps: 4 }),
       h('h2', { class: 'question' }, 'Melyik napon lesz?'),
       [...groups].map(([wk, list]) => h('div', { class: 'week' },
         h('div', { class: 'week-label' }, weekLabel(wk)),
@@ -218,7 +218,7 @@ export function renderAddTest(root, step) {
     const subjects = [...new Set(L.lessonsOn(d, w.date).map((l) => l.subject))];
     const others = (d.subjects || []).map((s) => s.name).filter((n) => !subjects.includes(n));
     const pick = (name) => { w.subject = name; w.topicIds = new Set(); go('#/uj-dolgozat/3'); };
-    root.append(pageHead('Új dolgozat', { back: '#/uj-dolgozat/1', step: 2, steps: 4 }),
+    add(root, pageHead('Új dolgozat', { back: '#/uj-dolgozat/1', step: 2, steps: 4 }),
       h('h2', { class: 'question' }, `Melyik órán? (${L.dayName(w.date)}, ${L.monthDay(w.date)})`),
       h('div', { class: 'big-grid' }, subjects.map((name) => subjectButton(name, () => pick(name)))),
       others.length ? h('details', { class: 'more' }, h('summary', null, 'Nincs a listában?'),
@@ -228,7 +228,7 @@ export function renderAddTest(root, step) {
   }
 
   if (step === 3) {
-    root.append(pageHead('Új dolgozat', { back: '#/uj-dolgozat/2', step: 3, steps: 4 }),
+    add(root, pageHead('Új dolgozat', { back: '#/uj-dolgozat/2', step: 3, steps: 4 }),
       h('h2', { class: 'question' }, 'Mi lesz?'),
       h('div', { class: 'big-grid' }, L.TEST_TYPES.map((ty) => h('button', {
         class: 'big-btn' + (w.type === ty.key ? ' on' : ''),
@@ -246,7 +246,7 @@ export function renderAddTest(root, step) {
       const r = await addTest({ date: w.date, subject: w.subject, type: w.type, title: w.title, topicIds: [...w.topicIds], newTopics: w.newTopics });
       if (r) { w.savedId = r.test.id; replace('#/uj-dolgozat/kesz'); }
     };
-    root.append(pageHead('Új dolgozat', { back: '#/uj-dolgozat/3', step: 4, steps: 4 }),
+    add(root, pageHead('Új dolgozat', { back: '#/uj-dolgozat/3', step: 4, steps: 4 }),
       h('div', { class: 'summary-line' }, subjectDot(w.subject), ` ${subj.name} ${typeInfo(w.type).label.toLowerCase()} · ${L.dayName(w.date)}, ${L.monthDay(w.date)}`),
       h('h2', { class: 'question' }, 'Miből lesz?'),
       chips ? h('p', { class: 'hint' }, 'Koppints azokra a témákra, amik kellenek:') : null,
@@ -263,7 +263,7 @@ export function renderAddTest(root, step) {
 
   // kész
   const test = d.tests.find((x) => x.id === w.savedId);
-  root.append(h('div', { class: 'done-screen' },
+  add(root, h('div', { class: 'done-screen' },
     h('div', { class: 'done-emoji' }, '✅'),
     h('h1', null, 'Felvetted!'),
     test ? h('p', { class: 'big-text' }, `${L.subjectInfo(d, test.subject).name} ${typeInfo(test.type).label.toLowerCase()}: ${L.dayName(test.date)}, ${L.monthDay(test.date)}`) : null,
@@ -297,7 +297,7 @@ export function renderAddTopic(root, step) {
     const todays = [...new Set(L.lessonsOn(d, t).map((l) => l.subject))];
     const others = (d.subjects || []).map((s) => s.name).filter((n) => !todays.includes(n));
     const pick = (name) => { w.subject = name; w.testIds = new Set(); go('#/uj-tema/2'); };
-    root.append(pageHead('Órán vettük', { step: 1, steps: 2 }),
+    add(root, pageHead('Órán vettük', { step: 1, steps: 2 }),
       h('h2', { class: 'question' }, 'Melyik órán?'),
       todays.length ? h('div', { class: 'big-grid' }, todays.map((n) => subjectButton(n, () => pick(n), w.subject === n))) : null,
       todays.length
@@ -316,7 +316,7 @@ export function renderAddTopic(root, step) {
       const r = await addTopic({ subject: w.subject, title, classDate: L.addDays(t, -w.when), testIds: [...w.testIds] });
       if (r) { w.saved = r.topic; replace('#/uj-tema/kesz'); }
     };
-    root.append(pageHead('Órán vettük', { back: '#/uj-tema/1', step: 2, steps: 2 }),
+    add(root, pageHead('Órán vettük', { back: '#/uj-tema/1', step: 2, steps: 2 }),
       h('div', { class: 'summary-line' }, subjectDot(w.subject), ' ' + L.subjectInfo(d, w.subject).name),
       h('h2', { class: 'question' }, 'Mit vettetek?'),
       h('input', {
@@ -345,7 +345,7 @@ export function renderAddTopic(root, step) {
   // kész
   const topic = w.saved;
   const deadline = topic.classDate ? L.nextLessonDate(d, topic.subject, topic.classDate) : null;
-  root.append(h('div', { class: 'done-screen' },
+  add(root, h('div', { class: 'done-screen' },
     h('div', { class: 'done-emoji' }, '✅'),
     h('h1', null, 'Felvetted!'),
     h('p', { class: 'big-text' }, topic.title),
@@ -366,7 +366,7 @@ export function renderTestDetail(root, id) {
   const d = S.data;
   const t = today();
   const test = d.tests.find((x) => x.id === id);
-  if (!test) { root.append(pageHead('Számonkérés'), emptyState('🤔', 'Ez a számonkérés már nincs meg.')); return; }
+  if (!test) { add(root, pageHead('Számonkérés'), emptyState('🤔', 'Ez a számonkérés már nincs meg.')); return; }
   const subj = L.subjectInfo(d, test.subject);
   const prog = L.testProgress(d, test, t);
   const ti = typeInfo(test.type);
@@ -394,7 +394,7 @@ export function renderTestDetail(root, id) {
   };
 
   const own = test.createdBy && test.createdBy === S.me.email;
-  root.append(
+  add(root, 
     pageHead(`${subj.name} ${ti.label.toLowerCase()}`),
     h('div', { class: 'detail-head', style: { '--subj': subj.color } },
       h('span', { class: 'big-icon' }, subj.icon),
@@ -438,7 +438,7 @@ export function renderRewards(root) {
     if (ok && await requestReward(r.id)) toast('Elküldve! Ha jóváhagyják, itt látod majd.', 'success');
   };
 
-  root.append(
+  add(root, 
     pageHead('Jutalmak'),
     h('div', { class: 'balance' },
       h('div', { class: 'balance-num' }, `⭐ ${pts.available}`),

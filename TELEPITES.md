@@ -22,7 +22,7 @@ Ehhez kell: egy Google-fiók (a szülőé, ebben lesz a táblázat) és egy ingy
 ## 2. A lapok létrehozása
 
 1. A szerkesztő tetején a függvényválasztóban válaszd ki: `tablazatElokeszitese`, majd kattints a **Futtatás** gombra.
-2. A Google engedélyt kér. Mivel ez a saját szkripted, megjelenik egy „A Google nem ellenőrizte ezt az alkalmazást” figyelmeztetés: **Speciális → Ugrás ide: … (nem biztonságos)** → **Engedélyezés**. Ez rendben van, a szkript csak a saját táblázatodhoz fér hozzá.
+2. A Google engedélyt kér. Az ablakban jelölj be **minden** pontot („Összes kijelölése”). Mivel ez a saját szkripted, megjelenik egy „A Google nem ellenőrizte ezt az alkalmazást” figyelmeztetés: **Speciális → Ugrás ide: … (nem biztonságos)** → **Engedélyezés**. Ez rendben van, a szkript csak a saját táblázatodhoz fér hozzá.
 3. Lépj vissza a táblázatba. Megjelennek a lapok, mintaadatokkal. Később is futtathatod a **Készülök → Táblázat előkészítése** menüből, ilyenkor semmit nem ír felül, csak a hiányzó dolgokat pótolja.
 
 ## 3. Töltsétek ki a táblázatot
@@ -131,3 +131,4 @@ A bejelentkezés eszközönként egyszer kell. Utána az eszköz 180 napig bejel
 | „Az alkalmazás még nincs beállítva” | A `web/config.js` fájlban nincs kitöltve az `API_URL`. Javítsd, majd töltsd fel újra (git push). |
 | A `Code.gs` módosítása nem látszik | Új verziót kell telepíteni (4. lépés, megjegyzés). |
 | Az app frissítése nem látszik | Zárd be, és nyisd meg újra az appot. |
+| „You do not have permission to call UrlFetchApp.fetch” | Az engedélykérésnél nem lett minden pont bejelölve. Az Apps Script szerkesztőben válaszd ki az `engedelyezes` függvényt → **Futtatás**, és az engedélykérő ablakban jelölj be **mindent** („Összes kijelölése”). |

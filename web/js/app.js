@@ -1,5 +1,5 @@
 // Belépési pont: útvonalak, bejelentkezés, kirajzolás.
-import { h, clear } from './dom.js';
+import { h, add, clear } from './dom.js';
 import { S, onChange, emit, start, load, login, logout, isParent, today } from './store.js';
 import { getConfig, isConfigured } from './api.js';
 import { renderHome, renderAddTest, renderAddTopic, renderTestDetail, renderRewards } from './child.js';
@@ -102,9 +102,9 @@ function render() {
   clear(root);
   document.body.classList.toggle('parent-mode', !!(S.phase === 'ready' && isParent()));
 
-  if (S.phase === 'loading') { root.append(loadingScreen()); return; }
-  if (S.phase === 'login') { root.append(loginScreen()); return; }
-  if (S.phase === 'error') { root.append(errorScreen()); return; }
+  if (S.phase === 'loading') { add(root, loadingScreen()); return; }
+  if (S.phase === 'login') { add(root, loginScreen()); return; }
+  if (S.phase === 'error') { add(root, errorScreen()); return; }
 
   const { path, param } = parseRoute();
   if (isParent()) {
@@ -118,7 +118,7 @@ function render() {
       default: renderHome(root);
     }
   }
-  if (S.busy) root.append(h('div', { class: 'saving', role: 'status' }, 'Mentés…'));
+  if (S.busy) add(root, h('div', { class: 'saving', role: 'status' }, 'Mentés…'));
   if (!routeChanged) window.scrollTo(0, scrollY);
   routeChanged = false;
 }
