@@ -5,7 +5,7 @@ export const DEFAULTS = {
   konnyu_ismetles: 0, konnyu_ablak: 0,
   kozepes_ismetles: 1, kozepes_ablak: 3,
   nehez_ismetles: 2, nehez_ablak: 4,
-  pont_atnezes: 1, pont_ismetles: 1, bonusz_dolgozat: 5,
+  pont_atnezes: 1, pont_ismetles: 1, bonusz_dolgozat: 5, pont_hazi: 1,
   elore_mutat_nap: 2,
   potlas_max_nap: 14,
 };
@@ -332,6 +332,127 @@ export function computeTodos(data, today, log = data.log) {
   return { ma, potlas, kesobb, keszMa };
 }
 
+// ---------- házi feladatok ----------
+
+/**
+ * Mikortól legyen a házi a mai teendők között: a határidő előtti utolsó tanítási naptól
+ * (vagyis a következő tanítási napra esedékes házi mindig ott van; hétvégén a hétfői is).
+ */
+function homeworkShowFrom(data, hw) {
+  for (let i = 1; i <= 14; i++) {
+    const d = addDays(hw.dueDate, -i);
+    if (isSchoolDay(data, d) || i === 14) return d;
+  }
+  return addDays(hw.dueDate, -1);
+}
+
+/**
+ * Egy házi feladat állapota egy adott napon.
+ *  kesz     – megcsinálta (doneDate ezen a napon vagy korábban)
+ *  teendo   – még nincs kész, a határidő ma vagy később
+ *  elmaradt – elmúlt a határidő, még pótolható (potlas_max_nap napig)
+ *  lejart   – régen elmúlt
+ */
+export function homeworkState(data, hw, today) {
+  if (hw.doneDate && hw.doneDate <= today) return { status: 'kesz', doneToday: hw.doneDate === today };
+  if (!hw.dueDate || hw.dueDate >= today) return { status: 'teendo', now: !hw.dueDate || today >= homeworkShowFrom(data, hw) };
+  if (diffDays(today, hw.dueDate) > setting(data, 'potlas_max_nap')) return { status: 'lejart' };
+  return { status: 'elmaradt' };
+}
+
+/** A házi feladatok teendői egy napra, ugyanazokkal a csoportokkal, mint a computeTodos. */
+export function homeworkTodos(data, today) {
+  const ma = [], potlas = [], kesobb = [], keszMa = [];
+  for (const hw of data.homework || []) {
+    if (createdOn(hw) && createdOn(hw) > today) continue;
+    const st = homeworkState(data, hw, today);
+    const item = { homework: hw, deadline: hw.dueDate || null, ...st };
+    if (st.status === 'kesz') { if (st.doneToday) keszMa.push(item); }
+    else if (st.status === 'elmaradt') potlas.push(item);
+    else if (st.status === 'teendo') (st.now ? ma : kesobb).push(item);
+  }
+  const byDeadline = (a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999');
+  ma.sort(byDeadline); potlas.sort(byDeadline); kesobb.sort(byDeadline);
+  return { ma, potlas, kesobb, keszMa };
+}
+
+// ---------- heti órarend ----------
+
+/** A hét hétfője. */
+export function mondayOf(d) { return addDays(d, 1 - weekday(d)); }
+
+/**
+ * Egy hét napjai (hétfőtől péntekig, plusz szombat/vasárnap, ha akkor is van óra),
+ * mindegyikhez az órákkal és azzal, hogy szünet-e.
+ */
+export function weekDays(data, monday) {
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(monday, i);
+    const lessons = lessonsOn(data, date);
+    if (i >= 5 && !lessons.length) continue;
+    out.push({ date, lessons, holiday: isHoliday(data, date) });
+  }
+  return out;
+}
+
+/**
+ * Mire kell készülni egy órára, és hogy állunk vele.
+ *  status:
+ *   nincs    – nincs hozzá teendő
+ *   jo       – minden kész
+ *   halad    – van még teendő, de most nem kell vele foglalkozni (vagy mára már megvolt)
+ *   figyelem – most kell vele foglalkozni (benne van a mai teendőkben, vagy témák hiányoznak)
+ *   potolni  – elmúlt óra, amire nem lett átnézve, és még pótolható
+ *   mult     – elmúlt óra
+ *  `nowIds`: a mai teendők témáinak azonosítói (computeTodos(...).ma), egyszer kiszámolva a hétre.
+ */
+export function lessonPrep(data, date, subject, today, idx = indexLog(data.log), nowIds = null) {
+  const n = norm(subject);
+  if (!nowIds) nowIds = new Set(computeTodos(data, today).ma.map((x) => x.topic.id));
+  const ahead = setting(data, 'elore_mutat_nap');
+
+  const tests = (data.tests || [])
+    .filter((t) => t.date === date && norm(t.subject) === n)
+    .map((test) => ({ test, prog: testProgress(data, test, today, idx) }));
+
+  const regular = (data.topics || [])
+    .filter((tp) => tp.classDate && tp.classDate < date && norm(tp.subject) === n && nextLessonDate(data, tp.subject, tp.classDate) === date)
+    .map((topic) => {
+      const st = regularState(data, topic, idx.get(topic.id) || [], today);
+      return { topic, status: st ? st.status : 'teendo', done: !!st && st.status === 'kesz' };
+    });
+
+  const covered = (data.topics || []).filter((tp) => tp.classDate === date && norm(tp.subject) === n);
+
+  const homework = (data.homework || [])
+    .filter((hw) => hw.dueDate === date && norm(hw.subject) === n && (!createdOn(hw) || createdOn(hw) <= today))
+    .map((hw) => ({ homework: hw, ...homeworkState(data, hw, today) }));
+  const hwPending = homework.filter((x) => x.status !== 'kesz');
+
+  const pendingTopics = [
+    ...tests.flatMap((x) => x.prog.states.filter((s) => s.status !== 'kesz').map((s) => s.topic)),
+    ...regular.filter((r) => !r.done).map((r) => r.topic),
+  ];
+  const emptyNearTest = tests.some((x) => x.prog.count === 0
+    && diffDays(date, today) <= Math.max(x.prog.rule.window, 1) + ahead);
+  const emptyTest = tests.some((x) => x.prog.count === 0);
+
+  let status;
+  if (date < today) {
+    status = regular.some((r) => r.status === 'elmaradt') || hwPending.some((x) => x.status === 'elmaradt') ? 'potolni' : 'mult';
+  } else if (!tests.length && !regular.length && !homework.length) {
+    status = 'nincs';
+  } else if (!pendingTopics.length && !emptyTest && !hwPending.length) {
+    status = 'jo';
+  } else if (date === today || emptyNearTest || pendingTopics.some((tp) => nowIds.has(tp.id)) || hwPending.some((x) => x.now)) {
+    status = 'figyelem';
+  } else {
+    status = 'halad';
+  }
+  return { status, tests, regular, covered, homework, pending: pendingTopics.length + hwPending.length };
+}
+
 // ---------- sorozat ----------
 
 /**
@@ -341,6 +462,7 @@ export function computeTodos(data, today, log = data.log) {
  */
 export function streak(data, today, log = data.log) {
   const dates = new Set((log || []).map((l) => l.date));
+  for (const hw of data.homework || []) if (hw.doneDate && hw.doneDate <= today) dates.add(hw.doneDate);
   if (!dates.size) return 0;
   const first = [...dates].sort()[0];
   let n = dates.has(today) ? 1 : 0;
@@ -348,7 +470,7 @@ export function streak(data, today, log = data.log) {
     if (dates.has(d)) { n++; continue; }
     if (!isSchoolDay(data, d)) continue;
     const before = log.filter((l) => l.date < d);
-    if (computeTodos(data, d, before).ma.length === 0) continue;
+    if (computeTodos(data, d, before).ma.length === 0 && homeworkTodos(data, d).ma.length === 0) continue;
     break;
   }
   return n;
@@ -362,6 +484,10 @@ export function points(data, today, log = data.log) {
   const bonusEach = setting(data, 'bonusz_dolgozat');
   let earned = 0;
   for (const l of log || []) earned += l.kind === 'ismetles' ? pI : pA;
+  const pH = setting(data, 'pont_hazi');
+  let homework = 0;
+  for (const hw of data.homework || []) if (hw.doneDate && hw.doneDate <= today) homework += pH;
+  earned += homework;
 
   const idx = indexLog(log);
   const topicIds = new Set((data.topics || []).map((t) => t.id));
@@ -383,5 +509,5 @@ export function points(data, today, log = data.log) {
     if (r.status === 'kerve') pending += Number(r.price) || 0;
   }
   const total = earned + bonus;
-  return { total, earned, bonus, bonusTests, spent, pending, balance: total - spent, available: total - spent - pending };
+  return { total, earned, homework, bonus, bonusTests, spent, pending, balance: total - spent, available: total - spent - pending };
 }

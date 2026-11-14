@@ -2,7 +2,7 @@
 import { h, add, clear } from './dom.js';
 import { S, onChange, emit, start, load, login, logout, isParent, today } from './store.js';
 import { getConfig, isConfigured } from './api.js';
-import { renderHome, renderAddTest, renderAddTopic, renderTestDetail, renderRewards } from './child.js';
+import { renderHome, renderAddTest, renderAddTopic, renderTestDetail, renderRewards, renderWeek, renderAddHomework } from './child.js';
 import { renderParent } from './parent.js';
 
 const root = document.getElementById('app');
@@ -113,8 +113,10 @@ function render() {
     switch (path) {
       case 'uj-dolgozat': renderAddTest(root, param || 1); break;
       case 'uj-tema': renderAddTopic(root, param || 1); break;
+      case 'uj-hazi': renderAddHomework(root, param || 1); break;
       case 'dolgozat': renderTestDetail(root, param); break;
       case 'jutalmak': renderRewards(root); break;
+      case 'het': renderWeek(root, param); break;
       default: renderHome(root);
     }
   }

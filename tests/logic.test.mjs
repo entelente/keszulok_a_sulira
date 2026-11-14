@@ -192,3 +192,80 @@ test('később felvett témák nem számítanak visszamenőleg (sorozat)', () =>
   assert.equal(L.computeTodos(d, '2026-11-17').ma.length, 0);
   assert.equal(L.computeTodos(d, '2026-11-19').potlas.length, 1);
 });
+
+test('heti órarend: órák felkészülési állapota', () => {
+  assert.equal(L.mondayOf('2026-11-19'), '2026-11-16');
+  assert.equal(L.mondayOf('2026-11-22'), '2026-11-16'); // vasárnap
+  const reg = { id: 'r1', subject: 'Magyar', title: 'Ady', classDate: '2026-11-16' };
+  const tp = { id: 't2', subject: 'Matek', title: 'Törtek' };
+  const test1 = { id: 'x1', subject: 'Matek', date: '2026-11-26', type: 'dolgozat', difficulty: 'közepes', topicIds: ['t2'] };
+  const empty = { id: 'x2', subject: 'Magyar', date: '2026-11-25', type: 'dolgozat', difficulty: 'közepes', topicIds: [] };
+  const d = baseData({ topics: [reg, tp], tests: [test1, empty] });
+  const st = (date, subj, today, data = d) => L.lessonPrep(data, date, subj, today).status;
+
+  const week = L.weekDays(d, '2026-11-16');
+  assert.deepEqual(week.map((x) => x.date), ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20']);
+
+  // órai téma: hétfőn vették, szerdáig át kell nézni
+  assert.equal(st('2026-11-18', 'Magyar', '2026-11-16'), 'figyelem');
+  const done = { ...d, log: [logEntry('r1', '2026-11-16')] };
+  assert.equal(st('2026-11-18', 'Magyar', '2026-11-16', done), 'jo');
+  // elmúlt az óra átnézés nélkül → pótolni; az elmúlt üres óra csak "mult"
+  assert.equal(st('2026-11-18', 'Magyar', '2026-11-19'), 'potolni');
+  assert.equal(st('2026-11-17', 'Matek', '2026-11-19'), 'mult');
+  // nincs teendő
+  assert.equal(st('2026-11-17', 'Matek', '2026-11-16'), 'nincs');
+
+  // dolgozat jövő csütörtökön: most még ráér, a hét elején már figyelni kell rá
+  assert.equal(st('2026-11-26', 'Matek', '2026-11-16'), 'halad');
+  assert.equal(st('2026-11-26', 'Matek', '2026-11-23'), 'figyelem');
+  // átnézte és ismételte → kész
+  const ready = { ...d, log: [logEntry('t2', '2026-11-20'), logEntry('t2', '2026-11-24', 'ismetles')] };
+  assert.equal(st('2026-11-26', 'Matek', '2026-11-24', ready), 'jo');
+  // ma már ismételte, de holnap még kell → jó úton (nem kell ma vele foglalkozni)
+  const nehez = { ...d, tests: [{ ...test1, difficulty: 'nehéz' }], log: [logEntry('t2', '2026-11-24')] };
+  assert.equal(st('2026-11-26', 'Matek', '2026-11-24', nehez), 'halad');
+
+  // témák nélküli dolgozat: messze még ráér, közel figyelem
+  assert.equal(st('2026-11-25', 'Magyar', '2026-11-16'), 'halad');
+  assert.equal(st('2026-11-25', 'Magyar', '2026-11-21'), 'figyelem');
+});
+
+test('házi feladat: mai teendő, később, pótolni, csillag, sorozat, heti nézet', () => {
+  // matek: kedd, csütörtök, péntek; magyar: hétfő, szerda
+  const hw1 = { id: 'h1', subject: 'Matek', dueDate: '2026-11-19', task: '45/3', doneDate: '', createdAt: '2026-11-17 15:00:00' }; // csütörtökre
+  const hw2 = { id: 'h2', subject: 'Magyar', dueDate: '2026-11-23', task: '', doneDate: '', createdAt: '2026-11-18 15:00:00' }; // hétfőre
+  const d = baseData({ homework: [hw1, hw2] });
+  const ids = (list) => list.map((x) => x.homework.id);
+
+  // kedden a csütörtöki házi még ráér, szerdán már mai teendő
+  let ht = L.homeworkTodos(d, '2026-11-17');
+  assert.deepEqual(ids(ht.kesobb), ['h1']);
+  assert.deepEqual(ids(ht.ma), []);
+  ht = L.homeworkTodos(d, '2026-11-18');
+  assert.deepEqual(ids(ht.ma), ['h1']);
+  assert.deepEqual(ids(ht.kesobb), ['h2']);
+  // a hétfőre szóló házi pénteken és hétvégén is mai teendő
+  assert.deepEqual(ids(L.homeworkTodos(d, '2026-11-20').ma), ['h2']);
+  assert.deepEqual(ids(L.homeworkTodos(d, '2026-11-22').ma), ['h2']);
+  // elmúlt a határidő → pótolni
+  assert.deepEqual(ids(L.homeworkTodos(d, '2026-11-20').potlas), ['h1']);
+  // a felvétel előtti napon még nem létezett
+  assert.deepEqual(ids(L.homeworkTodos(d, '2026-11-16').kesobb), []);
+
+  // kész: aznap a "ma kész" között, csillagot ér, sorozatba számít
+  const done = { ...d, homework: [{ ...hw1, doneDate: '2026-11-18' }, hw2] };
+  ht = L.homeworkTodos(done, '2026-11-18');
+  assert.deepEqual(ids(ht.keszMa), ['h1']);
+  assert.deepEqual(ids(ht.ma), []);
+  assert.equal(L.points(done, '2026-11-18').total, 1);
+  assert.equal(L.points(done, '2026-11-18').homework, 1);
+  assert.equal(L.streak(done, '2026-11-18'), 1);
+
+  // heti nézet
+  assert.equal(L.lessonPrep(d, '2026-11-19', 'Matek', '2026-11-17').status, 'halad');
+  assert.equal(L.lessonPrep(d, '2026-11-19', 'Matek', '2026-11-18').status, 'figyelem');
+  assert.equal(L.lessonPrep(done, '2026-11-19', 'Matek', '2026-11-18').status, 'jo');
+  assert.equal(L.lessonPrep(d, '2026-11-19', 'Matek', '2026-11-20').status, 'potolni');
+  assert.equal(L.lessonPrep(d, '2026-11-19', 'Matek', '2026-11-18').homework.length, 1);
+});

@@ -34,6 +34,7 @@ Ehhez kell: egy Google-fiók (a szülőé, ebben lesz a táblázat) és egy ingy
 | **Órarend** | Nap (`Hétfő`…`Péntek`), hányadik óra, tantárgy (a Tantárgyak lapról választható). A **Hét** oszlop csak A/B hetes órarendnél kell (`A` vagy `B`, üresen mindkét héten). |
 | **Csengetés** | Az órák kezdete és vége. Nem kötelező, ha kitöltitek, az óra mellett megjelenik az időpont. |
 | **Szünetek** | Szünetek és tanítás nélküli napok (első és utolsó nap). Ezeken a napokon nincs óra, és a sorozat sem szakad meg. |
+| **Házi feladatok** | Ezt nem kell kitölteni: az app tölti, amikor a gyerek (vagy ti) felvesztek egy házit. Ha hiányzik a lap, az első házi felvételekor magától létrejön. |
 | **Jutalmak** | Mit kaphat és hány csillagért. Az „Aktív” oszlopban `nem`-mel elrejthetsz egy jutalmat. |
 | **Beállítások** | Lásd lent. A `google_client_id` a 6. lépésben kerül ide. |
 
@@ -109,6 +110,7 @@ A bejelentkezés eszközönként egyszer kell. Utána az eszköz 180 napig bejel
 | `konnyu_ismetles` / `konnyu_ablak` | 0 / 0 | Könnyű: elég egyszer átnézni |
 | `alap_nehezseg` | közepes | A gyerek által felvett számonkérés nehézsége. A szülői módban számonkérésenként átállítható, és az ismétlésszám és az ablak külön is megadható. |
 | `pont_atnezes`, `pont_ismetles` | 1, 1 | Csillag tanulásonként (egy témáért naponta egyszer jár) |
+| `pont_hazi` | 1 | Csillag egy elkészült házi feladatért |
 | `bonusz_dolgozat` | 5 | Bónusz, ha egy számonkérés minden témája időben kész lett |
 | `elore_mutat_nap` | 2 | A számonkérés témái ennyi nappal az ismétlési időszak előtt kerülnek a „Mai teendők” közé (addig a „Később is ráér” részben vannak) |
 | `potlas_max_nap` | 14 | Egy elmaradt órai átnézés ennyi napig marad a pótolnivalók között |

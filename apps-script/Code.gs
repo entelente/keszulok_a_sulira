@@ -27,6 +27,10 @@ const SCHEMA = {
       ['title', 'Cím'], ['difficulty', 'Nehézség'], ['reps', 'Ismétlések'], ['window', 'Ablak (nap)'],
       ['topicIds', 'Témák (ID)'], ['note', 'Megjegyzés'], ['createdBy', 'Felvette'], ['createdAt', 'Létrehozva']],
   },
+  homework: {
+    name: 'Házi feladatok', cols: [['id', 'ID'], ['subject', 'Tantárgy'], ['dueDate', 'Határidő'], ['task', 'Feladat'],
+      ['doneDate', 'Kész'], ['doneBy', 'Kipipálta'], ['createdBy', 'Felvette'], ['createdAt', 'Létrehozva']],
+  },
   log: { name: 'Napló', cols: [['id', 'ID'], ['date', 'Dátum'], ['at', 'Időpont'], ['topicId', 'Téma ID'], ['kind', 'Típus'], ['by', 'Ki']] },
   rewards: { name: 'Jutalmak', cols: [['id', 'ID'], ['name', 'Jutalom'], ['price', 'Ár (csillag)'], ['icon', 'Ikon'], ['active', 'Aktív']] },
   requests: {
@@ -37,7 +41,10 @@ const SCHEMA = {
   sessions: { name: 'Munkamenetek', cols: [['token', 'Token'], ['email', 'Email'], ['createdAt', 'Létrehozva'], ['lastUsed', 'Utoljára'], ['device', 'Eszköz']] },
 };
 
-const DATE_KEYS = ['classDate', 'date', 'from', 'to'];
+const DATE_KEYS = ['classDate', 'date', 'from', 'to', 'dueDate', 'doneDate'];
+
+// Ezeket a lapokat a program magától létrehozza, ha hiányoznak (később bekerült funkciók).
+const AUTO_CREATE = ['homework'];
 const TIME_KEYS = ['start', 'end'];
 
 const DEFAULT_SETTINGS = [
@@ -52,6 +59,7 @@ const DEFAULT_SETTINGS = [
   ['pont_atnezes', 1, 'Csillag egy átnézésért'],
   ['pont_ismetles', 1, 'Csillag egy ismétlésért'],
   ['bonusz_dolgozat', 5, 'Bónusz csillag, ha egy számonkérés minden témája kész lett időben'],
+  ['pont_hazi', 1, 'Csillag egy elkészült házi feladatért'],
   ['elore_mutat_nap', 2, 'A számonkérés témái ennyi nappal az ismétlési időszak előtt kerülnek a mai teendők közé'],
   ['potlas_max_nap', 14, 'Egy elmaradt órai átnézés ennyi napig marad a pótolnivalók között'],
   ['munkamenet_napok', 180, 'Ennyi nap használaton kívül után kell újra bejelentkezni'],
@@ -104,6 +112,10 @@ const ACTIONS = {
   addTest: [addTest_, true, 'any'],
   updateTest: [updateTest_, true, 'any'],
   deleteTest: [deleteTest_, true, 'any'],
+  addHomework: [addHomework_, true, 'any'],
+  updateHomework: [updateHomework_, true, 'any'],
+  deleteHomework: [deleteHomework_, true, 'any'],
+  setHomeworkDone: [setHomeworkDone_, true, 'any'],
   logStudy: [logStudy_, true, 'child'],
   undoStudy: [undoStudy_, true, 'child'],
   requestReward: [requestReward_, true, 'child'],
@@ -147,9 +159,26 @@ function now_() { return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:
 function today_() { return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd'); }
 function newId_(prefix) { return prefix + Utilities.getUuid().replace(/-/g, '').slice(0, 10); }
 
-function sheet_(key) {
-  const sh = ss_().getSheetByName(SCHEMA[key].name);
+/** A lap. Az AUTO_CREATE lapokat íráskor létrehozza; `optional`-lel olvasáskor null-t ad, ha nincs. */
+function sheet_(key, opts) {
+  const ss = ss_();
+  let sh = ss.getSheetByName(SCHEMA[key].name);
+  if (!sh && AUTO_CREATE.indexOf(key) >= 0) {
+    if (opts && opts.optional) return null;
+    sh = createSheet_(ss, key);
+  }
   if (!sh) throw appError_('SETUP', 'Hiányzik a(z) „' + SCHEMA[key].name + '” lap. Futtasd a Készülök → Táblázat előkészítése menüpontot.');
+  return sh;
+}
+
+function createSheet_(ss, key) {
+  const def = SCHEMA[key];
+  const sh = ss.insertSheet(def.name);
+  const headers = def.cols.map(function (c) { return c[1]; });
+  sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#E3EBF6');
+  sh.setFrozenRows(1);
+  sh.autoResizeColumns(1, headers.length);
+  formatSheet_(sh, key);
   return sh;
 }
 
@@ -172,7 +201,8 @@ function looseDate_(s) {
 
 /** A lap sorai objektumként; minden objektum kap egy `_row` mezőt (sor száma). */
 function readTable_(key) {
-  const sh = sheet_(key);
+  const sh = sheet_(key, { optional: true });
+  if (!sh) return [];
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return [];
   const hm = headerMap_(sh, key);
@@ -338,6 +368,13 @@ function requestOut_(r) {
   };
 }
 
+function homeworkOut_(h) {
+  return {
+    id: String(h.id), subject: String(h.subject), dueDate: h.dueDate || '', task: String(h.task || ''),
+    doneDate: h.doneDate || '', doneBy: norm_(h.doneBy), createdBy: h.createdBy || '', createdAt: h.createdAt || '',
+  };
+}
+
 function rewardOut_(r) {
   const a = norm_(r.active);
   return { id: String(r.id), name: String(r.name), price: Number(r.price) || 0, icon: String(r.icon || '🎁'), active: !(a === 'nem' || a === 'false' || a === 'n') };
@@ -424,6 +461,7 @@ function bootstrap_(user) {
       topics: readTable_('topics').filter(function (t) { return t.id; }).map(topicOut_),
       tests: readTable_('tests').filter(function (t) { return t.id && t.date; }).map(testOut_),
       log: readTable_('log').filter(function (l) { return l.id && l.date; }).map(logOut_),
+      homework: readTable_('homework').filter(function (h) { return h.id && h.subject; }).map(homeworkOut_),
       rewards: readTable_('rewards').filter(function (r) { return r.id && r.name; }).map(rewardOut_)
         .filter(function (r) { return isParent || r.active; }),
       requests: readTable_('requests').filter(function (r) { return r.id; }).map(requestOut_),
@@ -549,6 +587,61 @@ function deleteTest_(user, body) {
   deleteRow_('tests', t._row);
   return { id: t.id };
 }
+
+// ---------- házi feladatok ----------
+
+function addHomework_(user, body) {
+  const hw = {
+    id: newId_('h_'), subject: requireSubject_(body.subject), dueDate: validDate_(body.dueDate), task: cleanText_(body.task, 300),
+    doneDate: '', doneBy: '', createdBy: user.email, createdAt: now_(),
+  };
+  appendRow_('homework', hw);
+  return { homework: homeworkOut_(hw) };
+}
+
+function requireOwnHomework_(user, hw, what) {
+  if (user.role !== 'parent' && norm_(hw.createdBy) !== user.email) throw appError_('FORBIDDEN', 'Ezt a házit csak szülő ' + what + '.');
+}
+
+function updateHomework_(user, body) {
+  const hw = findById_('homework', body.id);
+  requireOwnHomework_(user, hw, 'módosíthatja');
+  const patch = {};
+  if (body.task !== undefined) patch.task = cleanText_(body.task, 300);
+  if (body.dueDate !== undefined) patch.dueDate = validDate_(body.dueDate);
+  if (body.subject !== undefined) patch.subject = requireSubject_(body.subject);
+  updateRow_('homework', hw._row, patch);
+  Object.keys(patch).forEach(function (k) { hw[k] = patch[k]; });
+  return { homework: homeworkOut_(hw) };
+}
+
+function deleteHomework_(user, body) {
+  const hw = findById_('homework', body.id);
+  requireOwnHomework_(user, hw, 'törölheti');
+  deleteRow_('homework', hw._row);
+  return { id: String(hw.id) };
+}
+
+/** Kész / nincs kész. A gyerek csak a saját mai pipáját vonhatja vissza, a szülő bármikor. */
+function setHomeworkDone_(user, body) {
+  const hw = findById_('homework', body.id);
+  let patch = null;
+  if (body.done) {
+    if (!hw.doneDate) patch = { doneDate: today_(), doneBy: user.email };
+  } else if (hw.doneDate) {
+    if (user.role !== 'parent' && (hw.doneDate !== today_() || norm_(hw.doneBy) !== user.email)) {
+      throw appError_('FORBIDDEN', 'Csak a mai pipát lehet visszavonni.');
+    }
+    patch = { doneDate: '', doneBy: '' };
+  }
+  if (patch) {
+    updateRow_('homework', hw._row, patch);
+    Object.keys(patch).forEach(function (k) { hw[k] = patch[k]; });
+  }
+  return { homework: homeworkOut_(hw) };
+}
+
+// ---------- tanulás ----------
 
 function logStudy_(user, body) {
   const topic = findById_('topics', body.topicId);

@@ -398,3 +398,84 @@ body.parent-mode .btn { min-height: 42px; }
 .check-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: #FBFAF7; cursor: pointer; }
 .check-row input { width: 20px; height: 20px; }
 .ppage .back { min-height: 38px; margin-bottom: 6px; }
+
+/* ---------- heti órarend ---------- */
+
+.week-tab {
+  display: inline-flex; flex-direction: column; justify-content: center; align-items: center;
+  text-decoration: none; line-height: 1.15; padding: 6px 20px;
+}
+.tab-sub { font-size: 13px; font-weight: 700; opacity: .85; }
+.wk-summary { font-weight: 800; margin: 12px 0; }
+.wk-grid { display: grid; grid-template-columns: repeat(var(--cols, 5), minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.wk-grid > * { grid-column: var(--c); grid-row: var(--r); min-width: 0; }
+.wk-head { display: flex; flex-direction: column; align-items: center; padding: 6px 4px; border-radius: 12px; }
+.wk-head.today { background: var(--primary); color: #fff; }
+.wk-head.past { opacity: .55; }
+.wk-dayname { font-weight: 900; }
+.wk-date { font-size: 14px; }
+.wk-cell { min-height: 78px; border-radius: 12px; }
+.wk-empty { border: 2px dashed var(--line); opacity: .6; }
+.wk-off {
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  background: #EEEBE4; color: var(--muted); font-weight: 800;
+}
+.wk-lesson {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
+  padding: 8px 10px; border: 0; border-left: 6px solid var(--subj);
+  background: color-mix(in srgb, var(--subj) 10%, white);
+  font: inherit; color: var(--text); text-align: left; cursor: pointer;
+}
+.wk-lesson:active { transform: scale(.98); }
+.wk-lesson.st-jo { box-shadow: inset 0 0 0 2px var(--ok); }
+.wk-lesson.st-figyelem { box-shadow: inset 0 0 0 3px var(--warn); }
+.wk-lesson.st-potolni { box-shadow: inset 0 0 0 2px #D9B26A; }
+.wk-lesson.past { opacity: .6; }
+.wk-lesson.past.st-potolni { opacity: .95; }
+.wk-top { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
+.wk-num { font-weight: 900; font-size: 14px; color: var(--muted); }
+.wk-icon { font-size: 20px; }
+.wk-name { font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-test { font-size: 13px; font-weight: 800; padding: 2px 8px; border-radius: 8px; background: var(--primary); color: #fff; }
+.wk-state { font-size: 13px; font-weight: 800; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.wk-state.st-jo { background: var(--ok-soft); color: #23603F; }
+.wk-state.st-halad { background: var(--primary-soft); color: var(--primary-dark); }
+.wk-state.st-figyelem { background: var(--warn-soft); color: #7A5110; }
+.wk-state.st-potolni { background: #F3E9D6; color: #7A5110; }
+.wk-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 16px; }
+.wk-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.wk-modal-block { display: flex; flex-direction: column; gap: 6px; margin: 14px 0; }
+.wk-topics { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 0; padding-left: 20px; }
+.home-week-link { font-weight: 800; font-size: 16px; text-decoration: none; }
+
+/* ---------- házi feladat ---------- */
+
+.todo-main.as-button {
+  display: block; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.badge.hw { background: #EDE6F7; color: #4F3A78; }
+.badge.hw.done { background: var(--ok-soft); color: #23603F; }
+.wk-hw { font-size: 13px; font-weight: 800; padding: 2px 8px; border-radius: 8px; background: #EDE6F7; color: #4F3A78; }
+.wk-hw.done { background: var(--ok-soft); color: #23603F; }
+.day-tag {
+  align-self: flex-start; margin-top: 4px; padding: 2px 8px; border-radius: 999px;
+  background: var(--primary); color: #fff; font-size: 13px; font-weight: 800;
+}
+.row.nowrap { flex-wrap: nowrap; }
+
+/* öt gomb az alsó sávban: keskeny képernyőn kisebb felirat */
+@media (max-width: 560px) {
+  .actionbar { gap: 6px; padding-left: 6px; padding-right: 6px; }
+  .action { font-size: 14px; min-height: 64px; }
+  .action-icon { font-size: 24px; }
+}
+
+/* keskeny képernyőn (telefon) napok egymás alatt */
+@media (max-width: 720px) {
+  .wk-grid { grid-template-columns: 1fr; }
+  .wk-grid > * { grid-column: auto; grid-row: auto; }
+  .wk-empty { display: none; }
+  .wk-head { flex-direction: row; gap: 10px; align-items: baseline; margin-top: 10px; }
+  .wk-off { min-height: 48px; }
+  .wk-cell { min-height: 0; }
+}

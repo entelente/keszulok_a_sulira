@@ -2,7 +2,7 @@
 // és telepíthető legyen. Az adatok (Apps Script) mindig a hálózatról jönnek.
 //
 // Új verzió kiadásakor növeld a VERSION értékét.
-const VERSION = 'keszulok-v2';
+const VERSION = 'keszulok-v4';
 const SHELL = [
   './',
   './index.html',
@@ -39,7 +39,8 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    // no-cache: mindig a szervertől kérdezzük meg, van-e újabb (a böngésző HTTP-gyorsítótára nem késlelteti a frissítést)
+    fetch(e.request.url, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); }
         return res;

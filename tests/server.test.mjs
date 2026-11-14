@@ -225,3 +225,46 @@ test('hibás bemenetek', () => {
   assert.equal(env.call({ action: 'nincsilyen', token: kid }).code, 'BAD_REQUEST');
   assert.equal(env.call({ action: 'deleteTopic', token: kid, id: 'x' }).code, 'FORBIDDEN');
 });
+
+test('házi feladat: régi táblázaton magától létrejön a lap, pipálás, visszavonás, jogosultság', () => {
+  const env = setup();
+  env.sheets.delete('Házi feladatok'); // régi táblázat, amiben még nincs ilyen lap
+  const kid = loginAs(env, 'gyerek@example.com');
+  const parent = loginAs(env, 'anya@example.com');
+
+  let b = env.call({ action: 'bootstrap', token: kid });
+  assert.equal(b.ok, true, b.error);
+  assert.deepEqual(b.data.data.homework, []);
+  assert.equal(env.sheets.has('Házi feladatok'), false); // olvasás nem hoz létre lapot
+
+  let r = env.call({ action: 'addHomework', token: kid, subject: 'matek', dueDate: '2026-11-19', task: ' 45. oldal  3. feladat ' });
+  assert.equal(r.ok, true, r.error);
+  assert.ok(env.sheets.has('Házi feladatok'));
+  const hw = r.data.homework;
+  assert.equal(hw.subject, 'Matek');
+  assert.equal(hw.dueDate, '2026-11-19');
+  assert.equal(hw.task, '45. oldal 3. feladat');
+  assert.equal(hw.doneDate, '');
+
+  r = env.call({ action: 'setHomeworkDone', token: kid, id: hw.id, done: true });
+  assert.equal(r.ok, true, r.error);
+  assert.match(r.data.homework.doneDate, /^\d{4}-\d{2}-\d{2}$/);
+  b = env.call({ action: 'bootstrap', token: kid });
+  assert.equal(b.data.data.homework[0].doneDate, r.data.homework.doneDate);
+  assert.equal(b.data.data.homework[0].doneBy, 'gyerek@example.com');
+
+  r = env.call({ action: 'setHomeworkDone', token: kid, id: hw.id, done: false });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.homework.doneDate, '');
+
+  // a szülő más házijához nem nyúlhat a gyerek, a szülő mindenhez
+  r = env.call({ action: 'addHomework', token: parent, subject: 'Magyar', dueDate: '2026-11-20' });
+  assert.equal(r.ok, true, r.error);
+  const ph = r.data.homework;
+  assert.equal(env.call({ action: 'deleteHomework', token: kid, id: ph.id }).code, 'FORBIDDEN');
+  assert.equal(env.call({ action: 'updateHomework', token: parent, id: hw.id, dueDate: '2026-11-24' }).data.homework.dueDate, '2026-11-24');
+  assert.equal(env.call({ action: 'addHomework', token: kid, subject: 'Matek', dueDate: 'holnap' }).code, 'BAD_REQUEST');
+  assert.equal(env.call({ action: 'deleteHomework', token: kid, id: hw.id }).ok, true);
+  b = env.call({ action: 'bootstrap', token: parent });
+  assert.deepEqual(b.data.data.homework.map((x) => x.id), [ph.id]);
+});

@@ -4,8 +4,12 @@ import * as L from './logic.js';
 import {
   S, emit, today, logout, load, childName, userName,
   addTest, updateTest, deleteTest, addTopic, updateTopic, deleteTopic, decideRequest,
+  addHomework, updateHomework, deleteHomework, toggleHomework,
 } from './store.js';
-import { todoRow, testCard, section, emptyState, longDate, typeInfo, stateBadge, ruleText, KIND_LABEL } from './components.js';
+import {
+  todoRow, testCard, section, emptyState, longDate, typeInfo, stateBadge, ruleText, KIND_LABEL,
+  weekTimetable, weekTabs, defaultWeekOffset, homeworkRow,
+} from './components.js';
 
 const go = (hash) => { location.hash = hash; };
 
@@ -16,8 +20,10 @@ function nav(active) {
     h('div', { class: 'pnav-brand' }, '🎒 Készülök', h('span', { class: 'muted small' }, ' · szülői mód')),
     h('nav', { class: 'pnav-items' },
       item('attekintes', '#/', 'Áttekintés'),
+      item('orarend', '#/orarend', 'Órarend'),
       item('kerdesek', '#/kerdesek', ['Kérések', pendingCount ? h('span', { class: 'pill' }, pendingCount) : null]),
       item('szamonkeresek', '#/szamonkeresek', 'Számonkérések'),
+      item('hazik', '#/hazik', 'Házik'),
       item('temak', '#/temak', 'Témák'),
       item('naplo', '#/naplo', 'Napló')),
     h('div', { class: 'pnav-right' },
@@ -30,9 +36,11 @@ function nav(active) {
 export function renderParent(root, path, param) {
   const views = {
     '': ['attekintes', overview],
+    orarend: ['orarend', weekView],
     kerdesek: ['kerdesek', requestsView],
     szamonkeresek: ['szamonkeresek', testsView],
     szamonkeres: ['szamonkeresek', testEditView],
+    hazik: ['hazik', homeworkView],
     temak: ['temak', topicsView],
     naplo: ['naplo', logView],
   };
@@ -40,6 +48,20 @@ export function renderParent(root, path, param) {
   const page = h('main', { class: 'ppage' });
   add(root, nav(key), page);
   fn(page, param);
+}
+
+// =====================================================================
+// Heti órarend
+// =====================================================================
+
+function weekView(page, param) {
+  const offset = param === 0 || param === 1 ? param : defaultWeekOffset();
+  add(page,
+    h('h1', null, 'Órarend'),
+    h('p', { class: 'muted' }, 'A keret színe a tantárgyé, a jelzés azt mutatja, hogy áll a felkészüléssel. Kattints egy órára a részletekért.'),
+    weekTabs(offset, '#/orarend'),
+    weekTimetable(offset, { testHref: (test) => `#/szamonkeres/${test.id}` }),
+  );
 }
 
 // =====================================================================
@@ -55,24 +77,27 @@ function overview(page) {
   const t = today();
   const todos = L.computeTodos(d, t);
   const pts = L.points(d, t);
-  const total = todos.ma.length + todos.keszMa.length;
+  const hwt = L.homeworkTodos(d, t);
+  const hwRow = (x) => homeworkRow(x.homework, { readOnly: true });
+  const total = todos.ma.length + todos.keszMa.length + hwt.ma.length + hwt.keszMa.length;
+  const doneCount = todos.keszMa.length + hwt.keszMa.length;
   const pendingReq = (d.requests || []).filter((r) => r.status === 'kerve');
 
   add(page, 
     h('h1', null, `${childName()} · ${longDate(t)}`),
     pendingReq.length ? h('a', { class: 'news', href: '#/kerdesek' }, `🎁 ${pendingReq.length} jutalomkérés vár jóváhagyásra →`) : null,
     h('div', { class: 'stats' },
-      stat('Mai teendők', total ? `${todos.keszMa.length} / ${total}` : '–', total ? null : 'ma nincs teendő'),
+      stat('Mai teendők', total ? `${doneCount} / ${total}` : '–', total ? null : 'ma nincs teendő'),
       stat('Sorozat', `🔥 ${L.streak(d, t)} nap`),
       stat('Elkölthető csillag', `⭐ ${pts.available}`, `összesen ${pts.total}, elköltve ${pts.spent}${pts.pending ? `, függőben ${pts.pending}` : ''}`),
-      stat('Pótolnivaló', String(todos.potlas.length), 'elmaradt órai átnézés')),
+      stat('Pótolnivaló', String(todos.potlas.length + hwt.potlas.length), 'elmaradt átnézés vagy házi')),
     h('div', { class: 'grid2' },
       h('div', { class: 'col' },
         section('Mai teendők', null, total
-          ? h('div', { class: 'todo-list' }, [...todos.ma.map((x) => todoRow(x, { readOnly: true })), ...todos.keszMa.map((x) => todoRow(x, { done: true, readOnly: true }))])
+          ? h('div', { class: 'todo-list' }, [...hwt.ma.map(hwRow), ...todos.ma.map((x) => todoRow(x, { readOnly: true })), ...hwt.keszMa.map(hwRow), ...todos.keszMa.map((x) => todoRow(x, { done: true, readOnly: true }))])
           : emptyState('🙂', 'Ma nincs teendője.')),
-        todos.potlas.length ? section('Pótolnivaló', null, h('div', { class: 'todo-list calm' }, todos.potlas.map((x) => todoRow(x, { readOnly: true })))) : null,
-        todos.kesobb.length ? section(`Később esedékes (${todos.kesobb.length})`, null, h('div', { class: 'todo-list' }, todos.kesobb.map((x) => todoRow(x, { readOnly: true })))) : null),
+        todos.potlas.length + hwt.potlas.length ? section('Pótolnivaló', null, h('div', { class: 'todo-list calm' }, [...hwt.potlas.map(hwRow), ...todos.potlas.map((x) => todoRow(x, { readOnly: true }))])) : null,
+        todos.kesobb.length + hwt.kesobb.length ? section(`Később esedékes (${todos.kesobb.length + hwt.kesobb.length})`, null, h('div', { class: 'todo-list' }, [...hwt.kesobb.map(hwRow), ...todos.kesobb.map((x) => todoRow(x, { readOnly: true }))])) : null),
       h('div', { class: 'col' },
         section('Közelgő számonkérések', h('a', { class: 'btn small secondary', href: '#/szamonkeres/uj' }, '+ Új'),
           L.upcomingTests(d, t).length
@@ -320,6 +345,99 @@ function editTopic(topic) {
         label: 'Mentés', kind: 'primary', onClick: async () => {
           const r = await updateTopic({ id: topic.id, title: f.title, subject: f.subject, classDate: f.classDate || '' });
           return r ? undefined : true; // hiba esetén nyitva marad
+        },
+      },
+    ],
+  });
+}
+
+// =====================================================================
+// Házi feladatok
+// =====================================================================
+
+let newHw = null;
+let hwShowDone = false;
+
+function hwStatusText(d, x, t) {
+  const st = L.homeworkState(d, x, t);
+  if (st.status === 'kesz') return `✔ kész (${x.doneDate}${x.doneBy ? ', ' + userName(x.doneBy) : ''})`;
+  if (st.status === 'elmaradt') return 'elmaradt, pótolható';
+  if (st.status === 'lejart') return 'nem lett kész';
+  return st.now ? 'ma esedékes teendő' : 'még ráér';
+}
+
+function homeworkView(page) {
+  const d = S.data;
+  const t = today();
+  if (!newHw) {
+    const subject = (d.subjects[0] || {}).name || '';
+    newHw = { subject, dueDate: L.nextLessonDate(d, subject, t) || L.addDays(t, 1), task: '' };
+  }
+  const all = d.homework || [];
+  const open = all.filter((x) => !x.doneDate).sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+  const done = all.filter((x) => x.doneDate).sort((a, b) => String(b.doneDate).localeCompare(String(a.doneDate)));
+
+  const addNew = async () => {
+    if (!newHw.subject || !newHw.dueDate) { toast('Válassz tantárgyat és határidőt!', 'error'); return; }
+    const r = await addHomework({ subject: newHw.subject, dueDate: newHw.dueDate, task: newHw.task });
+    if (r) { newHw.task = ''; toast('Hozzáadva.', 'success'); }
+  };
+  const rows = (list) => list.map((x) => [
+    `${x.dueDate} (${L.dayName(x.dueDate)})`,
+    `${L.subjectInfo(d, x.subject).icon} ${x.subject}`,
+    x.task || '–',
+    hwStatusText(d, x, t),
+    userName(x.createdBy),
+    h('div', { class: 'row nowrap' },
+      h('button', { class: 'btn small ' + (x.doneDate ? 'secondary' : 'primary'), disabled: S.pending.has(x.id), onclick: () => toggleHomework(x.id) },
+        x.doneDate ? 'Visszavonás' : '✓ Kész'),
+      h('button', { class: 'btn small secondary', onclick: () => editHomework(x) }, 'Szerkesztés')),
+  ]);
+  const cols = ['Határidő', 'Tantárgy', 'Feladat', 'Állapot', 'Felvette', ''];
+
+  add(page,
+    h('h1', null, 'Házi feladatok'),
+    h('div', { class: 'panel' },
+      h('h2', null, 'Új házi feladat'),
+      h('div', { class: 'form-grid' },
+        h('label', { class: 'field' }, h('span', null, 'Tantárgy'), h('select', {
+          class: 'input',
+          onchange: (e) => { newHw.subject = e.target.value; newHw.dueDate = L.nextLessonDate(d, newHw.subject, t) || newHw.dueDate; emit(); },
+        }, (d.subjects || []).map((s) => h('option', { value: s.name, selected: newHw.subject === s.name }, `${s.icon} ${s.name}`)))),
+        h('label', { class: 'field' }, h('span', null, 'Határidő'), h('input', { class: 'input', type: 'date', value: newHw.dueDate, oninput: (e) => { newHw.dueDate = e.target.value; } }),
+          h('span', { class: 'muted small' }, 'alapból a tantárgy következő órája')),
+        h('label', { class: 'field' }, h('span', null, 'Feladat (nem kötelező)'), h('input', { class: 'input', value: newHw.task, maxlength: 300, oninput: (e) => { newHw.task = e.target.value; }, onkeydown: (e) => { if (e.key === 'Enter') addNew(); } })),
+        h('div', { class: 'field end' }, h('button', { class: 'btn primary', onclick: addNew, disabled: S.busy > 0 }, '+ Hozzáadás')))),
+    section(`Nincs még kész (${open.length})`, null,
+      open.length ? table(cols, rows(open)) : emptyState('🎉', 'Minden házi kész.')),
+    section(`Elkészült (${done.length})`,
+      done.length ? h('button', { class: 'btn small ghost', onclick: () => { hwShowDone = !hwShowDone; emit(); } }, hwShowDone ? 'Elrejtés' : 'Mutasd') : null,
+      hwShowDone && done.length ? table(cols, rows(done.slice(0, 50))) : null),
+  );
+}
+
+function editHomework(hw) {
+  const d = S.data;
+  const f = { task: hw.task, subject: hw.subject, dueDate: hw.dueDate };
+  modal({
+    title: 'Házi feladat szerkesztése',
+    body: h('div', { class: 'form-grid one' },
+      h('label', { class: 'field' }, h('span', null, 'Feladat'), h('input', { class: 'input', value: f.task, maxlength: 300, oninput: (e) => { f.task = e.target.value; } })),
+      h('label', { class: 'field' }, h('span', null, 'Tantárgy'), h('select', { class: 'input', onchange: (e) => { f.subject = e.target.value; } },
+        (d.subjects || []).map((s) => h('option', { value: s.name, selected: L.norm(f.subject) === L.norm(s.name) }, s.name)))),
+      h('label', { class: 'field' }, h('span', null, 'Határidő'), h('input', { class: 'input', type: 'date', value: f.dueDate, oninput: (e) => { f.dueDate = e.target.value; } }))),
+    actions: [
+      {
+        label: 'Törlés', kind: 'ghost danger', onClick: async () => {
+          if (await confirmModal('Törlöd a házit?', `${hw.subject}: ${hw.task || 'házi feladat'} (${hw.dueDate})`, 'Törlöm')) await deleteHomework(hw.id);
+        },
+      },
+      { label: 'Mégse', kind: 'secondary' },
+      {
+        label: 'Mentés', kind: 'primary', onClick: async () => {
+          if (!f.dueDate) { toast('Add meg a határidőt!', 'error'); return true; }
+          const r = await updateHomework({ id: hw.id, task: f.task, subject: f.subject, dueDate: f.dueDate });
+          return r ? undefined : true;
         },
       },
     ],

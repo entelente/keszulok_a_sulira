@@ -1,10 +1,12 @@
 // Gyerek mód: nagy gombok, kevés gépelés, nyugodt visszajelzések.
-import { h, add, confirmModal, toast } from './dom.js';
+import { h, add, confirmModal, modal, toast } from './dom.js';
 import * as L from './logic.js';
-import { S, emit, today, addTest, addTopic, updateTest, deleteTest, requestReward, cancelRequest, logout } from './store.js';
+import {
+  S, emit, today, addTest, addTopic, updateTest, deleteTest, requestReward, cancelRequest, logout, addHomework, deleteHomework,
+} from './store.js';
 import {
   todoRow, lessonCard, testCard, section, emptyState, progressBar, subjectDot, longDate, capitalize,
-  typeInfo, testTopicRow, ruleText, daysUntilText,
+  typeInfo, testTopicRow, ruleText, daysUntilText, weekTimetable, weekTabs, defaultWeekOffset, homeworkRow,
 } from './components.js';
 
 const go = (hash) => { location.hash = hash; };
@@ -62,40 +64,48 @@ export function renderHome(root) {
   const d = S.data;
   const t = today();
   const todos = L.computeTodos(d, t);
-  const total = todos.ma.length + todos.keszMa.length;
+  const hwt = L.homeworkTodos(d, t);
+  const hwRow = (it) => homeworkRow(it.homework, { onOpen: openHomework });
+  const openCount = todos.ma.length + hwt.ma.length;
+  const doneCount = todos.keszMa.length + hwt.keszMa.length;
+  const total = openCount + doneCount;
 
-  // --- mai teendők
+  // --- mai teendők (elöl a házik, mert azoknak a következő óráig kész kell lenniük)
   const todayList = [
+    ...hwt.ma.map(hwRow),
     ...todos.ma.map((it) => todoRow(it)),
+    ...hwt.keszMa.map(hwRow),
     ...todos.keszMa.map((it) => todoRow(it, { done: true })),
   ];
   let todayEmpty = null;
   if (!total) todayEmpty = emptyState('🙂', 'Ma nincs teendőd.');
-  else if (!todos.ma.length) todayEmpty = h('div', { class: 'all-done' }, '🎉 Mára minden kész! Szép munka!');
+  else if (!openCount) todayEmpty = h('div', { class: 'all-done' }, '🎉 Mára minden kész! Szép munka!');
 
   const todaySection = section('Mai teendőim',
-    total ? h('span', { class: 'count' }, `${todos.keszMa.length} / ${total} kész`) : null,
-    total ? progressBar(todos.keszMa.length / total, { tone: todos.ma.length ? 'primary' : 'ok', label: 'Mai haladás' }) : null,
+    total ? h('span', { class: 'count' }, `${doneCount} / ${total} kész`) : null,
+    total ? progressBar(doneCount / total, { tone: openCount ? 'primary' : 'ok', label: 'Mai haladás' }) : null,
     todayEmpty,
     h('div', { class: 'todo-list' }, todayList),
   );
 
-  const catchUp = todos.potlas.length ? section('Pótolnivaló',
-    h('span', { class: 'count' }, `${todos.potlas.length}`),
-    h('p', { class: 'hint' }, 'Ezek az órák már elmúltak, de még nem nézted át őket. Ha van időd, pótold!'),
-    h('div', { class: 'todo-list calm' }, todos.potlas.map((it) => todoRow(it)))) : null;
+  const catchUpCount = todos.potlas.length + hwt.potlas.length;
+  const catchUp = catchUpCount ? section('Pótolnivaló',
+    h('span', { class: 'count' }, `${catchUpCount}`),
+    h('p', { class: 'hint' }, 'Ezek az órák már elmúltak, de még nincs kész minden. Ha van időd, pótold!'),
+    h('div', { class: 'todo-list calm' }, [...hwt.potlas.map(hwRow), ...todos.potlas.map((it) => todoRow(it))])) : null;
 
-  const later = todos.kesobb.length ? h('details', { class: 'section later' },
-    h('summary', null, `Később is ráér (${todos.kesobb.length})`),
+  const laterCount = todos.kesobb.length + hwt.kesobb.length;
+  const later = laterCount ? h('details', { class: 'section later' },
+    h('summary', null, `Később is ráér (${laterCount})`),
     h('p', { class: 'hint' }, 'Ezeket most még nem kell, de ha előre megcsinálod, az is jó.'),
-    h('div', { class: 'todo-list' }, todos.kesobb.map((it) => todoRow(it)))) : null;
+    h('div', { class: 'todo-list' }, [...hwt.kesobb.map(hwRow), ...todos.kesobb.map((it) => todoRow(it))])) : null;
 
   // --- órák
   if (!lessonDay || lessonDay < t) lessonDay = defaultLessonDay(t);
   const dayOptions = [...new Set([L.isSchoolDay(d, t) ? t : null, ...L.nextSchoolDays(d, L.addDays(t, 1), 2)].filter(Boolean))].slice(0, 3);
   if (!dayOptions.includes(lessonDay)) lessonDay = dayOptions[0] || t;
   const lessons = L.lessonsOn(d, lessonDay);
-  const lessonsSection = section('Órák', null,
+  const lessonsSection = section('Órák', h('a', { class: 'home-week-link', href: '#/het' }, '🗓️ Egész hét →'),
     h('div', { class: 'tabs', role: 'tablist' }, dayOptions.map((x) => h('button', {
       class: 'tab' + (x === lessonDay ? ' active' : ''), role: 'tab', 'aria-selected': x === lessonDay ? 'true' : 'false',
       onclick: () => { lessonDay = x; emit(); },
@@ -124,7 +134,9 @@ export function renderHome(root) {
 function actionBar() {
   return h('nav', { class: 'actionbar' },
     h('a', { class: 'action', href: '#/uj-dolgozat/1', onclick: () => { testWiz = null; } }, h('span', { class: 'action-icon' }, '📝'), 'Dolgozat'),
+    h('a', { class: 'action', href: '#/uj-hazi/1', onclick: () => { hwWiz = null; } }, h('span', { class: 'action-icon' }, '🏠'), 'Házi'),
     h('a', { class: 'action', href: '#/uj-tema/1', onclick: () => { topicWiz = null; } }, h('span', { class: 'action-icon' }, '📘'), 'Órán vettük'),
+    h('a', { class: 'action', href: '#/het' }, h('span', { class: 'action-icon' }, '🗓️'), 'Órarend'),
     h('a', { class: 'action', href: '#/jutalmak' }, h('span', { class: 'action-icon' }, '🎁'), 'Jutalmak'),
   );
 }
@@ -280,6 +292,131 @@ function subjectButton(name, onclick, on = false) {
 }
 
 // =====================================================================
+// Házi feladat
+// =====================================================================
+
+let hwWiz = null;
+
+/** A legutóbbi tanítási nap (ma, vagy hétvégén a péntek): ezen kaphatta a házit. */
+function lastSchoolDay(t) {
+  for (let i = 0; i < 14; i++) {
+    const x = L.addDays(t, -i);
+    if (L.isSchoolDay(S.data, x)) return x;
+  }
+  return t;
+}
+
+function openHomework(hw) {
+  const t = today();
+  const subj = L.subjectInfo(S.data, hw.subject);
+  const mine = L.norm(hw.createdBy) === L.norm(S.me.email);
+  const actions = [];
+  if (mine) {
+    actions.push({
+      label: 'Törlöm', kind: 'secondary',
+      onClick: async () => {
+        if (await confirmModal('Törlöd ezt a házit?', 'Ha rosszul vetted fel, nyugodtan töröld, és vedd fel újra.', 'Törlöm')) await deleteHomework(hw.id);
+      },
+    });
+  }
+  actions.push({ label: 'Bezárás', kind: 'primary' });
+  modal({
+    title: `🏠 ${subj.icon} ${subj.name} házi`,
+    body: [
+      h('p', { class: 'big-text' }, hw.task || 'Nincs leírás.'),
+      hw.dueDate ? h('p', null, `Határidő: ${longDate(hw.dueDate)} (${L.relDay(t, hw.dueDate)})`) : null,
+      hw.doneDate ? h('p', null, `✓ Kész: ${L.relDay(t, hw.doneDate)}`) : h('p', { class: 'muted' }, 'Ha megcsináltad, pipáld ki a listában.'),
+    ],
+    actions,
+  });
+}
+
+export function renderAddHomework(root, step) {
+  const d = S.data;
+  const t = today();
+  if (!hwWiz) hwWiz = { subject: null, dueDate: null, task: '', saved: null };
+  const w = hwWiz;
+  if ((step >= 2 && !w.subject) || (step >= 3 && !w.dueDate)) { go('#/uj-hazi/1'); return; }
+  if (step === 'kesz' && !w.saved) { go('#/'); return; }
+
+  if (step === 1) {
+    const day = lastSchoolDay(t);
+    const recent = [...new Set(L.lessonsOn(d, day).map((l) => l.subject))];
+    const others = (d.subjects || []).map((s) => s.name).filter((n) => !recent.includes(n));
+    const pick = (name) => { w.subject = name; w.dueDate = null; go('#/uj-hazi/2'); };
+    add(root, pageHead('Házi feladat', { step: 1, steps: 3 }),
+      h('h2', { class: 'question' }, 'Melyik órán kaptad?'),
+      recent.length ? [
+        h('p', { class: 'hint' }, day === t ? 'Mai órák:' : `${capitalize(L.dayName(day))}i órák:`),
+        h('div', { class: 'big-grid' }, recent.map((n) => subjectButton(n, () => pick(n), w.subject === n))),
+        h('details', { class: 'more' }, h('summary', null, 'Másik tantárgy'), h('div', { class: 'big-grid small' }, others.map((n) => subjectButton(n, () => pick(n))))),
+      ] : h('div', { class: 'big-grid small' }, others.map((n) => subjectButton(n, () => pick(n)))),
+    );
+    return;
+  }
+
+  if (step === 2) {
+    const next = [];
+    let from = t;
+    for (let i = 0; i < 3; i++) {
+      const x = L.nextLessonDate(d, w.subject, from);
+      if (!x) break;
+      next.push(x);
+      from = x;
+    }
+    const otherDays = L.nextSchoolDays(d, L.addDays(t, 1), 10).filter((x) => !next.includes(x));
+    const pick = (x) => { w.dueDate = x; go('#/uj-hazi/3'); };
+    const dayBtn = (x, tag) => h('button', { class: 'day-btn' + (w.dueDate === x ? ' on' : ''), onclick: () => pick(x) },
+      h('span', { class: 'day-name' }, capitalize(L.dayName(x))),
+      h('span', { class: 'day-date' }, L.monthDay(x)),
+      tag ? h('span', { class: 'day-tag' }, tag) : null);
+    add(root, pageHead('Házi feladat', { back: '#/uj-hazi/1', step: 2, steps: 3 }),
+      h('div', { class: 'summary-line' }, subjectDot(w.subject), ' ' + L.subjectInfo(d, w.subject).name),
+      h('h2', { class: 'question' }, 'Mikorra kell?'),
+      next.length
+        ? h('div', { class: 'day-grid' }, next.map((x, i) => dayBtn(x, i === 0 ? 'következő óra' : null)))
+        : h('p', { class: 'hint' }, 'Ennek a tantárgynak nem találtam órát az órarendben. Válassz napot:'),
+      h('details', { class: 'more', open: !next.length }, h('summary', null, 'Másik nap'),
+        h('div', { class: 'day-grid' }, otherDays.map((x) => dayBtn(x)))),
+    );
+    return;
+  }
+
+  if (step === 3) {
+    const saveIt = async () => {
+      const r = await addHomework({ subject: w.subject, dueDate: w.dueDate, task: (w.task || '').trim() });
+      if (r) { w.saved = r.homework; replace('#/uj-hazi/kesz'); }
+    };
+    add(root, pageHead('Házi feladat', { back: '#/uj-hazi/2', step: 3, steps: 3 }),
+      h('div', { class: 'summary-line' }, subjectDot(w.subject), ` ${L.subjectInfo(d, w.subject).name} · határidő: ${L.relDay(t, w.dueDate)}`),
+      h('h2', { class: 'question' }, 'Mi a feladat?'),
+      h('input', {
+        type: 'text', class: 'input big', id: 'hw-task', maxlength: 300, value: w.task, placeholder: 'pl. 45. oldal, 3. feladat',
+        autocomplete: 'off', enterkeyhint: 'done',
+        oninput: (e) => { w.task = e.target.value; },
+        onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } },
+      }),
+      h('p', { class: 'hint' }, 'Nem kötelező kitölteni.'),
+      h('div', { class: 'footer-actions' }, h('button', { class: 'btn primary big', onclick: saveIt, disabled: S.busy > 0 }, 'Mentés')),
+    );
+    return;
+  }
+
+  // kész
+  const hw = w.saved;
+  add(root, h('div', { class: 'done-screen' },
+    h('div', { class: 'done-emoji' }, '✅'),
+    h('h1', null, 'Felvetted!'),
+    h('p', { class: 'big-text' }, `${L.subjectInfo(d, hw.subject).name} házi · határidő: ${L.relDay(t, hw.dueDate)}`),
+    hw.task ? h('p', null, hw.task) : null,
+    h('p', { class: 'hint' }, 'Ha megcsináltad, pipáld ki a teendőid között.'),
+    h('div', { class: 'footer-actions' },
+      h('button', { class: 'btn secondary big', onclick: () => { hwWiz = null; go('#/uj-hazi/1'); } }, 'Még egy házi'),
+      h('a', { class: 'btn primary big', href: '#/', onclick: () => { hwWiz = null; } }, 'Kész')),
+  ));
+}
+
+// =====================================================================
 // Órán vettük (új téma)
 // =====================================================================
 
@@ -422,6 +559,19 @@ export function renderTestDetail(root, id) {
 // =====================================================================
 // Jutalmak
 // =====================================================================
+
+// =====================================================================
+// Heti órarend
+// =====================================================================
+
+export function renderWeek(root, param) {
+  const offset = param === 0 || param === 1 ? param : defaultWeekOffset();
+  add(root,
+    pageHead('Órarend'),
+    weekTabs(offset, '#/het'),
+    weekTimetable(offset, { testHref: (test) => `#/dolgozat/${test.id}` }),
+  );
+}
 
 export function renderRewards(root) {
   const d = S.data;

@@ -46,6 +46,7 @@ export async function load({ silent = false } = {}) {
     const r = await api('bootstrap');
     S.me = r.me;
     S.data = r.data;
+    if (!S.data.homework) S.data.homework = [];
     S.phase = 'ready';
     S.error = null;
     S.lastLoad = Date.now();
@@ -90,6 +91,7 @@ function applyResult(r) {
   if (r.test) upsert(d.tests, r.test);
   if (r.tests) r.tests.forEach((t) => upsert(d.tests, t));
   if (r.request) upsert(d.requests, r.request);
+  if (r.homework) upsert(d.homework, r.homework);
 }
 
 /** Mentés "Mentés…" jelzéssel. Siker esetén a választ adja vissza, hiba esetén null-t. */
@@ -169,6 +171,38 @@ export const updateTest = (p) => mutate('updateTest', p);
 export const deleteTest = (id) => mutate('deleteTest', { id }, (r) => {
   S.data.tests = S.data.tests.filter((t) => t.id !== r.id);
 });
+
+// ---------- házi feladatok ----------
+
+export const addHomework = (p) => mutate('addHomework', p);
+export const updateHomework = (p) => mutate('updateHomework', p);
+export const deleteHomework = (id) => mutate('deleteHomework', { id }, (r) => {
+  S.data.homework = S.data.homework.filter((x) => x.id !== r.id);
+});
+
+/** Kész / nincs kész – azonnal látszik, a mentés a háttérben fut. */
+export async function toggleHomework(id) {
+  if (S.pending.has(id)) return null;
+  const hw = S.data.homework.find((x) => x.id === id);
+  if (!hw) return null;
+  const before = { doneDate: hw.doneDate, doneBy: hw.doneBy };
+  const done = !hw.doneDate;
+  Object.assign(hw, done ? { doneDate: today(), doneBy: S.me.email } : { doneDate: '', doneBy: '' });
+  S.pending.add(id);
+  emit();
+  try {
+    const r = await api('setHomeworkDone', { id, done });
+    applyResult(r);
+    if (done) toast(`+${L.setting(S.data, 'pont_hazi')} ⭐  Kész a házi!`, 'success');
+    return r;
+  } catch (e) {
+    Object.assign(hw, before);
+    handleError(e);
+    return null;
+  } finally {
+    S.pending.delete(id); emit();
+  }
+}
 
 // ---------- jutalmak ----------
 
